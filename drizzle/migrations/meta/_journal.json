@@ -1,0 +1,34 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1791330947302,
+      "tag": "0000_migration",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1791355938640,
+      "tag": "0001_workshop_maps_url",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791528828847,
+      "tag": "0002_workshop_sort_order_new_workshops",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1791529382867,
+      "tag": "0003_workshop_socials_article_promo",
+      "breakpoints": true
+    }
+  ]
+}

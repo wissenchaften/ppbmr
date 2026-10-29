@@ -1,0 +1,1 @@
+ALTER TABLE public.workshops ADD COLUMN IF NOT EXISTS maps_url text;
