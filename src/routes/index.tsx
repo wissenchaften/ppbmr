@@ -14,9 +14,16 @@ export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
       { title: "Daftar Bengkel Malang & Sekitarnya — PPBMR" },
-      { name: "description", content: "Cari bengkel anggota PPBMR di Kota Malang, Kabupaten Malang, dan Batu. Lihat peta, rute, profil, dan benefit." },
+      {
+        name: "description",
+        content:
+          "Cari bengkel anggota PPBMR di Kota Malang, Kabupaten Malang, dan Batu. Lihat peta, rute, profil, dan benefit.",
+      },
       { property: "og:title", content: "Daftar Bengkel Malang & Sekitarnya — PPBMR" },
-      { property: "og:description", content: "Direktori bengkel anggota PPBMR lengkap dengan peta dan petunjuk arah." },
+      {
+        property: "og:description",
+        content: "Direktori bengkel anggota PPBMR lengkap dengan peta dan petunjuk arah.",
+      },
     ],
   }),
   component: Index,
@@ -65,12 +72,18 @@ function Index() {
               Rekomendasi Bengkel Mobil terbaik.
             </h1>
             <p className="mt-4 max-w-xl opacity-85">
-              {workshops.length} bengkel anggota PPBMR di Malang, Batu, dan sekitarnya. Klik nama bengkel untuk langsung
-              membuka rute di Google Maps.
+              {workshops.length} bengkel anggota PPBMR di Malang, Batu, dan sekitarnya. Klik nama
+              bengkel untuk langsung membuka rute di Google Maps.
             </p>
           </div>
           <div className="hidden h-64 w-64 shrink-0 items-center justify-center rounded-full bg-background p-6 shadow-card md:flex">
-            <img src={logo.url} alt="Logo PPBMR" width={320} height={167} className="h-auto w-full object-contain" />
+            <img
+              src={logo.url}
+              alt="Logo PPBMR"
+              width={320}
+              height={167}
+              className="h-auto w-full object-contain"
+            />
           </div>
         </div>
         <div className="stripe-signal h-2 opacity-90" />
@@ -89,7 +102,12 @@ function Index() {
           </div>
           <div className="flex flex-wrap gap-2">
             {AREAS.map((a) => (
-              <Button key={a} size="sm" variant={area === a ? "default" : "outline"} onClick={() => setArea(a)}>
+              <Button
+                key={a}
+                size="sm"
+                variant={area === a ? "default" : "outline"}
+                onClick={() => setArea(a)}
+              >
                 {a}
               </Button>
             ))}
@@ -99,7 +117,9 @@ function Index() {
         <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_440px]">
           <ul className="space-y-3">
             {isLoading && <li className="text-muted-foreground">Memuat bengkel…</li>}
-            {!isLoading && filtered.length === 0 && <li className="text-muted-foreground">Tidak ada bengkel yang cocok.</li>}
+            {!isLoading && filtered.length === 0 && (
+              <li className="text-muted-foreground">Tidak ada bengkel yang cocok.</li>
+            )}
             {filtered.map((w) => (
               <li
                 key={w.id}
@@ -123,15 +143,29 @@ function Index() {
                       <Navigation className="h-4 w-4 opacity-60 group-hover:opacity-100" />
                     </a>
                     <p className="mt-0.5 flex items-start gap-1 text-sm text-muted-foreground">
-                      <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-signal" /> {w.address}, {w.area}
+                      <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-signal" /> {w.address},{" "}
+                      {w.area}
                     </p>
                     <div className="mt-1 flex flex-wrap gap-x-4 text-xs text-muted-foreground">
-                      {w.phone && <span className="flex items-center gap-1"><Phone className="h-3 w-3" />{w.phone}</span>}
-                      {w.hours && <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{w.hours}</span>}
+                      {w.phone && (
+                        <span className="flex items-center gap-1">
+                          <Phone className="h-3 w-3" />
+                          {w.phone}
+                        </span>
+                      )}
+                      {w.hours && (
+                        <span className="flex items-center gap-1">
+                          <Clock className="h-3 w-3" />
+                          {w.hours}
+                        </span>
+                      )}
                     </div>
                     <div className="mt-2 flex flex-wrap gap-1.5">
                       {w.services.map((s) => (
-                        <span key={s} className="rounded-md bg-secondary px-2 py-0.5 text-xs font-medium text-secondary-foreground">
+                        <span
+                          key={s}
+                          className="rounded-md bg-secondary px-2 py-0.5 text-xs font-medium text-secondary-foreground"
+                        >
                           {s}
                         </span>
                       ))}
@@ -139,12 +173,18 @@ function Index() {
                   </div>
                   <div className="hidden flex-col gap-2 sm:flex">
                     <Button asChild size="sm">
-                      <Link to="/bengkel/$slug" params={{ slug: w.slug }}>Profil</Link>
+                      <Link to="/bengkel/$slug" params={{ slug: w.slug }}>
+                        Profil
+                      </Link>
                     </Button>
                     <DirectionsMenu lat={w.lat} lng={w.lng} label="Rute" stopPropagation />
                   </div>
                 </div>
-                <Link to="/bengkel/$slug" params={{ slug: w.slug }} className="mt-3 block text-sm font-semibold text-primary sm:hidden">
+                <Link
+                  to="/bengkel/$slug"
+                  params={{ slug: w.slug }}
+                  className="mt-3 block text-sm font-semibold text-primary sm:hidden"
+                >
                   Lihat profil & benefit →
                 </Link>
               </li>

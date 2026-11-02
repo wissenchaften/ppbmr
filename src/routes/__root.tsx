@@ -60,7 +60,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { title: "PPBMR — Direktori Bengkel Malang Raya" },
-      { name: "description", content: "Direktori bengkel anggota PPBMR di Malang, Batu, dan sekitarnya." },
+      {
+        name: "description",
+        content: "Direktori bengkel anggota PPBMR di Malang, Batu, dan sekitarnya.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],

@@ -2,7 +2,8 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
-const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36";
+const UA =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36";
 
 function htmlToText(html: string) {
   return html
@@ -28,7 +29,11 @@ function findLinks(html: string) {
 
 export const autofillFromMaps = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d) => z.object({ mapsUrl: z.string().url().max(2000), website: z.string().max(500).optional() }).parse(d))
+  .inputValidator((d) =>
+    z
+      .object({ mapsUrl: z.string().url().max(2000), website: z.string().max(500).optional() })
+      .parse(d),
+  )
   .handler(async ({ data }) => {
     const apiKey = process.env["LOVABLE_API_KEY"];
     if (!apiKey) throw new Error("Layanan AI belum tersedia");
@@ -37,17 +42,28 @@ export const autofillFromMaps = createServerFn({ method: "POST" })
     let resolvedUrl = data.mapsUrl;
     let mapsText = "";
     try {
-      const r = await fetch(data.mapsUrl, { redirect: "follow", headers: { "User-Agent": UA, "Accept-Language": "id-ID,id" } });
+      const r = await fetch(data.mapsUrl, {
+        redirect: "follow",
+        headers: { "User-Agent": UA, "Accept-Language": "id-ID,id" },
+      });
       resolvedUrl = r.url || data.mapsUrl;
       const html = await r.text();
       mapsText = html.slice(0, 200000);
-    } catch { /* abaikan */ }
+    } catch {
+      /* abaikan */
+    }
 
     // 2. Cari website bengkel
     let website = data.website?.trim() || "";
     if (!website) {
-      const cands = (mapsText.match(/https?:\/\/(?:www\.)?[a-z0-9.-]+\.[a-z]{2,}[^\s"'\\<>]*/gi) ?? [])
-        .filter((u) => !/google|gstatic|ggpht|googleapis|schema\.org|w3\.org|youtube\.com|facebook\.com|instagram\.com/i.test(u));
+      const cands = (
+        mapsText.match(/https?:\/\/(?:www\.)?[a-z0-9.-]+\.[a-z]{2,}[^\s"'\\<>]*/gi) ?? []
+      ).filter(
+        (u) =>
+          !/google|gstatic|ggpht|googleapis|schema\.org|w3\.org|youtube\.com|facebook\.com|instagram\.com/i.test(
+            u,
+          ),
+      );
       website = cands[0]?.replace(/\\u003d/g, "=").replace(/\\u0026/g, "&") ?? "";
     }
 
@@ -59,7 +75,9 @@ export const autofillFromMaps = createServerFn({ method: "POST" })
         const html = await r.text();
         links = findLinks(html);
         siteText = htmlToText(html).slice(0, 12000);
-      } catch { website = ""; }
+      } catch {
+        website = "";
+      }
     }
 
     const titleMatch = mapsText.match(/<meta[^>]+property="og:title"[^>]+content="([^"]+)"/i);
@@ -79,24 +97,31 @@ Isi website: ${siteText || "(tidak ada)"}`;
       body: JSON.stringify({
         model: "google/gemini-2.5-flash",
         messages: [{ role: "user", content: prompt }],
-        tools: [{
-          type: "function",
-          function: {
-            name: "isi_profil",
-            parameters: {
-              type: "object",
-              properties: {
-                name: { type: "string" }, address: { type: "string" }, phone: { type: "string" }, hours: { type: "string" },
-                services: { type: "array", items: { type: "string" } },
-                benefits: { type: "array", items: { type: "string" } },
-                organization_profile: { type: "string" }, description: { type: "string" },
-                profile_article: { type: "string", description: "Artikel profil 2-4 paragraf" },
-                promo_title: { type: "string" }, promo_text: { type: "string" },
+        tools: [
+          {
+            type: "function",
+            function: {
+              name: "isi_profil",
+              parameters: {
+                type: "object",
+                properties: {
+                  name: { type: "string" },
+                  address: { type: "string" },
+                  phone: { type: "string" },
+                  hours: { type: "string" },
+                  services: { type: "array", items: { type: "string" } },
+                  benefits: { type: "array", items: { type: "string" } },
+                  organization_profile: { type: "string" },
+                  description: { type: "string" },
+                  profile_article: { type: "string", description: "Artikel profil 2-4 paragraf" },
+                  promo_title: { type: "string" },
+                  promo_text: { type: "string" },
+                },
+                required: ["name"],
               },
-              required: ["name"],
             },
           },
-        }],
+        ],
         tool_choice: { type: "function", function: { name: "isi_profil" } },
       }),
     });
@@ -107,5 +132,8 @@ Isi website: ${siteText || "(tidak ada)"}`;
     const args = json?.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments;
     const parsed = args ? JSON.parse(args) : {};
 
-    return { ...parsed, website, ...links, resolvedUrl } as Record<string, string | string[] | undefined>;
+    return { ...parsed, website, ...links, resolvedUrl } as Record<
+      string,
+      string | string[] | undefined
+    >;
   });

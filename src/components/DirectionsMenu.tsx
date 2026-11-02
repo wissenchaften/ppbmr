@@ -15,7 +15,15 @@ type Props = {
 };
 
 /** Tombol petunjuk arah: pengunjung memilih titik awal — lokasi saat ini (izin lokasi) atau tentukan sendiri di Google Maps. */
-export function DirectionsMenu({ lat, lng, label = "Petunjuk arah", size = "sm", variant = "signal", className, stopPropagation }: Props) {
+export function DirectionsMenu({
+  lat,
+  lng,
+  label = "Petunjuk arah",
+  size = "sm",
+  variant = "signal",
+  className,
+  stopPropagation,
+}: Props) {
   const [open, setOpen] = useState(false);
   const [locating, setLocating] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -56,7 +64,11 @@ export function DirectionsMenu({ lat, lng, label = "Petunjuk arah", size = "sm",
   };
 
   return (
-    <div ref={ref} className={`relative ${className ?? ""}`} onClick={stopPropagation ? (e) => e.stopPropagation() : undefined}>
+    <div
+      ref={ref}
+      className={`relative ${className ?? ""}`}
+      onClick={stopPropagation ? (e) => e.stopPropagation() : undefined}
+    >
       <Button size={size} variant={variant} onClick={() => setOpen((v) => !v)} disabled={locating}>
         {locating ? <Loader2 className="animate-spin" /> : <Navigation />} {label}
       </Button>

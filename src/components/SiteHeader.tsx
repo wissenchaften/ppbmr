@@ -17,7 +17,9 @@ export function SiteHeader() {
           <img src={logo.url} alt="Logo PPBMR" width={80} height={42} className="h-10 w-auto" />
           <div className="leading-tight">
             <div className="font-display text-lg font-black text-primary">PPBMR</div>
-            <div className="text-[11px] text-muted-foreground">Bengkel terbaik dan terpercaya l Malang Raya</div>
+            <div className="text-[11px] text-muted-foreground">
+              Bengkel terbaik dan terpercaya l Malang Raya
+            </div>
           </div>
         </Link>
         <nav className="flex flex-1 flex-wrap items-center gap-5">
