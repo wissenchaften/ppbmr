@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useRef, useCallback, useEffect } from "react";
 import {
   MapPin,
   Search,
@@ -12,6 +12,7 @@ import {
   MessageSquare,
   ArrowRight,
   ChevronRight,
+  ChevronLeft,
   X,
   FileText,
   Tag,
@@ -69,6 +70,10 @@ const POPULAR_SERVICES = [
   "Overhaul Mesin",
   "Cat & Body Repair",
   "Emergency 24 Jam",
+  "Transmisi Matic",
+  "Kelistrikan & Audio",
+  "Rem & Kopling",
+  "Cuci & Salon Mobil",
 ] as const;
 
 function Index() {
@@ -113,6 +118,74 @@ function Index() {
   const [promoOnly, setPromoOnly] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [mobileView, setMobileView] = useState<"list" | "map">("list");
+
+  // Horizontal Scroll & Drag-to-Scroll State for Services (Desktop & Mobile)
+  const servicesScrollRef = useRef<HTMLDivElement>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+
+  const isMouseDownRef = useRef(false);
+  const dragStartXRef = useRef(0);
+  const dragScrollLeftRef = useRef(0);
+  const hasDraggedRef = useRef(false);
+
+  const checkScrollability = useCallback(() => {
+    const el = servicesScrollRef.current;
+    if (!el) return;
+    setCanScrollLeft(el.scrollLeft > 4);
+    setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 4);
+  }, []);
+
+  useEffect(() => {
+    checkScrollability();
+    const el = servicesScrollRef.current;
+    if (!el) return;
+
+    const onScroll = () => checkScrollability();
+    el.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    return () => {
+      el.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+    };
+  }, [checkScrollability]);
+
+  const scrollServices = (dir: "left" | "right") => {
+    const el = servicesScrollRef.current;
+    if (!el) return;
+    const offset = dir === "left" ? -240 : 240;
+    el.scrollBy({ left: offset, behavior: "smooth" });
+  };
+
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    const el = servicesScrollRef.current;
+    if (!el) return;
+    isMouseDownRef.current = true;
+    hasDraggedRef.current = false;
+    dragStartXRef.current = e.pageX - el.offsetLeft;
+    dragScrollLeftRef.current = el.scrollLeft;
+  };
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isMouseDownRef.current) return;
+    const el = servicesScrollRef.current;
+    if (!el) return;
+    const x = e.pageX - el.offsetLeft;
+    const walk = x - dragStartXRef.current;
+    if (Math.abs(walk) > 4) {
+      hasDraggedRef.current = true;
+      el.scrollLeft = dragScrollLeftRef.current - walk;
+    }
+  };
+
+  const handleMouseUpOrLeave = () => {
+    isMouseDownRef.current = false;
+  };
+
+  const handleServiceClick = (service: string) => {
+    if (hasDraggedRef.current) return;
+    setSelectedService(service);
+  };
 
   // Counter Per Wilayah
   const areaCounts = useMemo(() => {
@@ -318,25 +391,62 @@ function Index() {
 
           {/* Bar Filter Layanan Populer & Toggle Promo */}
           <div className="flex flex-col gap-3 pt-1 border-t sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs sm:pb-0 scrollbar-none">
-              <span className="mr-1 shrink-0 font-semibold text-muted-foreground">Layanan:</span>
-              {POPULAR_SERVICES.map((s) => {
-                const isSelected = selectedService === s;
-                return (
+            <div className="flex min-w-0 flex-1 items-center gap-2">
+              <span className="shrink-0 text-xs font-semibold text-muted-foreground">Layanan:</span>
+
+              <div className="relative flex min-w-0 flex-1 items-center">
+                {/* Tombol Geser Kiri (Desktop) */}
+                {canScrollLeft && (
                   <button
-                    key={s}
                     type="button"
-                    onClick={() => setSelectedService(s)}
-                    className={`shrink-0 rounded-lg px-2.5 py-1 font-medium transition-colors ${
-                      isSelected
-                        ? "bg-primary text-primary-foreground shadow-2xs"
-                        : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
-                    }`}
+                    onClick={() => scrollServices("left")}
+                    aria-label="Geser pilihan layanan ke kiri"
+                    className="hidden sm:flex absolute -left-2 z-10 h-7 w-7 items-center justify-center rounded-full border border-border bg-background text-foreground shadow-md hover:bg-muted hover:text-primary transition-all"
                   >
-                    {s}
+                    <ChevronLeft className="h-4 w-4" />
                   </button>
-                );
-              })}
+                )}
+
+                {/* Kontainer Layanan yang Dapat Digeser (Drag & Scroll) */}
+                <div
+                  ref={servicesScrollRef}
+                  onMouseDown={handleMouseDown}
+                  onMouseMove={handleMouseMove}
+                  onMouseUp={handleMouseUpOrLeave}
+                  onMouseLeave={handleMouseUpOrLeave}
+                  className="flex items-center gap-1.5 overflow-x-auto px-1 pb-1 text-xs sm:pb-0 scrollbar-none cursor-grab active:cursor-grabbing select-none"
+                >
+                  {POPULAR_SERVICES.map((s) => {
+                    const isSelected = selectedService === s;
+                    return (
+                      <button
+                        key={s}
+                        type="button"
+                        onClick={() => handleServiceClick(s)}
+                        className={`shrink-0 rounded-lg px-2.5 py-1 font-medium transition-colors ${
+                          isSelected
+                            ? "bg-primary text-primary-foreground shadow-2xs"
+                            : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
+                        }`}
+                      >
+                        {s}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Tombol Geser Kanan (Desktop) */}
+                {canScrollRight && (
+                  <button
+                    type="button"
+                    onClick={() => scrollServices("right")}
+                    aria-label="Geser pilihan layanan ke kanan"
+                    className="hidden sm:flex absolute -right-2 z-10 h-7 w-7 items-center justify-center rounded-full border border-border bg-background text-foreground shadow-md hover:bg-muted hover:text-primary transition-all"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Toggle Promo Spesial */}
