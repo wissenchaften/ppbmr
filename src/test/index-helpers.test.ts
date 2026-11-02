@@ -5,6 +5,8 @@ import {
   stripMarkdownExcerpt,
   parseSearchQuery,
   matchesWorkshopSearch,
+  calculateDistanceKm,
+  formatDistance,
 } from "@/lib/index-helpers";
 
 describe("index-helpers", () => {
@@ -79,17 +81,20 @@ describe("index-helpers", () => {
         rawQuery: "",
         effectiveTokens: [],
         isGenericOnly: false,
+        hasProximityIntent: false,
       });
       expect(parseSearchQuery("   ")).toEqual({
         rawQuery: "",
         effectiveTokens: [],
         isGenericOnly: false,
+        hasProximityIntent: false,
       });
     });
 
     it("identifies generic-only queries ('bengkel', 'mobil', 'bengkel mobil')", () => {
       const q1 = parseSearchQuery("bengkel");
       expect(q1.isGenericOnly).toBe(true);
+      expect(q1.hasProximityIntent).toBe(false);
       expect(q1.effectiveTokens).toEqual([]);
 
       const q2 = parseSearchQuery("  BENGKEL  ");
@@ -103,6 +108,22 @@ describe("index-helpers", () => {
       const q4 = parseSearchQuery("mobil");
       expect(q4.isGenericOnly).toBe(true);
       expect(q4.effectiveTokens).toEqual([]);
+    });
+
+    it("identifies proximity intent ('bengkel terdekat', 'bengkel ac terdekat', 'dekat sini')", () => {
+      const q1 = parseSearchQuery("bengkel terdekat");
+      expect(q1.hasProximityIntent).toBe(true);
+      expect(q1.isGenericOnly).toBe(true);
+      expect(q1.effectiveTokens).toEqual([]);
+
+      const q2 = parseSearchQuery("bengkel ac terdekat");
+      expect(q2.hasProximityIntent).toBe(true);
+      expect(q2.isGenericOnly).toBe(false);
+      expect(q2.effectiveTokens).toEqual(["ac"]);
+
+      const q3 = parseSearchQuery("servis ban dekat");
+      expect(q3.hasProximityIntent).toBe(true);
+      expect(q3.effectiveTokens).toEqual(["servis", "ban"]);
     });
 
     it("extracts effective tokens when additional keywords are typed after 'bengkel'", () => {
@@ -175,6 +196,34 @@ describe("index-helpers", () => {
       const parsed = parseSearchQuery("bengkel soekarno ac");
       expect(matchesWorkshopSearch(mockWorkshopA, parsed)).toBe(true);
       expect(matchesWorkshopSearch(mockWorkshopB, parsed)).toBe(false);
+    });
+  });
+
+  describe("calculateDistanceKm", () => {
+    it("returns 0 for identical points", () => {
+      expect(calculateDistanceKm(-7.9786, 112.6318, -7.9786, 112.6318)).toBe(0);
+    });
+
+    it("calculates realistic distance between Malang and Batu (~16.5 km)", () => {
+      // Alun-Alun Malang: -7.9826, 112.6308
+      // Alun-Alun Batu: -7.8712, 112.5273
+      const dist = calculateDistanceKm(-7.9826, 112.6308, -7.8712, 112.5273);
+      expect(dist).toBeGreaterThan(15);
+      expect(dist).toBeLessThan(18);
+    });
+  });
+
+  describe("formatDistance", () => {
+    it("formats distances under 1 km as meters", () => {
+      expect(formatDistance(0.35)).toBe("350 m");
+      expect(formatDistance(0.08)).toBe("80 m");
+      expect(formatDistance(0.99)).toBe("990 m");
+    });
+
+    it("formats distances of 1 km and above with one decimal place", () => {
+      expect(formatDistance(1.0)).toBe("1.0 km");
+      expect(formatDistance(2.45)).toBe("2.5 km");
+      expect(formatDistance(15.2)).toBe("15.2 km");
     });
   });
 });

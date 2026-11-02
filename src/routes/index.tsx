@@ -1,6 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState, useRef, useCallback, useEffect } from "react";
+import { toast } from "sonner";
 import {
   MapPin,
   Search,
@@ -21,6 +22,8 @@ import {
   ExternalLink,
   Users,
   Navigation,
+  LocateFixed,
+  Loader2,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { WorkshopLogo } from "@/components/WorkshopLogo";
@@ -35,6 +38,8 @@ import {
   stripMarkdownExcerpt,
   parseSearchQuery,
   matchesWorkshopSearch,
+  calculateDistanceKm,
+  formatDistance,
 } from "@/lib/index-helpers";
 import logo from "@/assets/ppbmr-logo.webp.asset.json";
 
@@ -118,6 +123,42 @@ function Index() {
   const [promoOnly, setPromoOnly] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [mobileView, setMobileView] = useState<"list" | "map">("list");
+
+  // Geolocation & Proximity Sorting State
+  const [userCoords, setUserCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [isLocating, setIsLocating] = useState(false);
+  const [sortByDistance, setSortByDistance] = useState(false);
+
+  const requestUserLocation = useCallback((autoSort = true) => {
+    if (!navigator.geolocation) {
+      toast.error("Peramban Anda tidak mendukung deteksi lokasi.");
+      return;
+    }
+
+    setIsLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setIsLocating(false);
+        setUserCoords({
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+        });
+        if (autoSort) {
+          setSortByDistance(true);
+          setArea("Semua");
+          toast.success("Lokasi terdeteksi! Menampilkan bengkel terdekat dari posisi Anda.");
+        }
+      },
+      (err) => {
+        setIsLocating(false);
+        console.warn("Geolocation error:", err);
+        toast.error(
+          "Izin lokasi tidak diberikan. Silakan aktifkan izin lokasi di peramban Anda untuk mencari bengkel terdekat.",
+        );
+      },
+      { enableHighAccuracy: true, timeout: 10000 },
+    );
+  }, []);
 
   // Horizontal Scroll & Drag-to-Scroll State for Services (Desktop & Mobile)
   const servicesScrollRef = useRef<HTMLDivElement>(null);
@@ -211,9 +252,26 @@ function Index() {
   // Parsing Kata Kunci Pencarian (Smart Keyword & Category Stopwords)
   const parsedSearch = useMemo(() => parseSearchQuery(q), [q]);
 
-  // Hasil Filter Komprehensif
+  // Deteksi otomatis kata kunci pencarian terdekat (misal: "bengkel terdekat", "ac terdekat")
+  useEffect(() => {
+    if (parsedSearch.hasProximityIntent) {
+      if (!userCoords && !isLocating) {
+        requestUserLocation(true);
+      } else if (userCoords && !sortByDistance) {
+        setSortByDistance(true);
+      }
+    }
+  }, [
+    parsedSearch.hasProximityIntent,
+    userCoords,
+    isLocating,
+    sortByDistance,
+    requestUserLocation,
+  ]);
+
+  // Hasil Filter & Pengurutan Jarak Komprehensif
   const filtered = useMemo(() => {
-    return workshops.filter((w) => {
+    const matches = workshops.filter((w) => {
       // Filter Wilayah
       if (area !== "Semua" && w.area !== area) return false;
 
@@ -228,24 +286,49 @@ function Index() {
         if (!hasService) return false;
       }
 
-      // Filter Teks Cerdas (Multi-Token AND dengan Stopword Kategori)
+      // Filter Teks Cerdas (Multi-Token AND dengan Stopword Kategori & Proximity)
       if (!matchesWorkshopSearch(w, parsedSearch)) return false;
 
       return true;
     });
-  }, [workshops, area, promoOnly, selectedService, parsedSearch]);
+
+    // Pasang kalkulasi jarak jika titik pengguna tersedia
+    const withDistance = matches.map((w) => {
+      let distance: number | null = null;
+      if (userCoords && typeof w.lat === "number" && typeof w.lng === "number") {
+        distance = calculateDistanceKm(userCoords.lat, userCoords.lng, w.lat, w.lng);
+      }
+      return { ...w, distance };
+    });
+
+    // Urutkan dari yang terdekat jika mode sortByDistance aktif
+    if (sortByDistance && userCoords) {
+      withDistance.sort((a, b) => {
+        if (a.distance === null) return 1;
+        if (b.distance === null) return -1;
+        return a.distance - b.distance;
+      });
+    }
+
+    return withDistance;
+  }, [workshops, area, promoOnly, selectedService, parsedSearch, sortByDistance, userCoords]);
 
   // Bengkel Terpilih untuk Peta
   const selected = filtered.find((w) => w.id === selectedId) ?? filtered[0];
 
   const hasActiveFilters =
-    q.trim() !== "" || area !== "Semua" || selectedService !== "Semua Layanan" || promoOnly;
+    q.trim() !== "" ||
+    area !== "Semua" ||
+    selectedService !== "Semua Layanan" ||
+    promoOnly ||
+    sortByDistance;
 
   const handleResetFilters = () => {
     setQ("");
     setArea("Semua");
     setSelectedService("Semua Layanan");
     setPromoOnly(false);
+    setSortByDistance(false);
   };
 
   return (
@@ -318,18 +401,46 @@ function Index() {
                     value={q}
                     onChange={(e) => setQ(e.target.value)}
                     placeholder="Cari nama, wilayah, atau layanan (contoh: 'bengkel ac', 'spooring batu', 'sukun')…"
-                    className="h-13 rounded-2xl bg-card pl-11 pr-10 text-foreground placeholder:text-muted-foreground shadow-lg text-base border-primary/20 focus-visible:ring-signal"
+                    className="h-13 rounded-2xl bg-card pl-11 pr-20 text-foreground placeholder:text-muted-foreground shadow-lg text-base border-primary/20 focus-visible:ring-signal"
                   />
                   {q && (
                     <button
                       type="button"
                       onClick={() => setQ("")}
-                      className="absolute right-3.5 p-1 text-muted-foreground hover:text-foreground"
+                      className="absolute right-11 p-1 text-muted-foreground hover:text-foreground"
                       aria-label="Bersihkan pencarian"
                     >
                       <X className="h-4 w-4" />
                     </button>
                   )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (sortByDistance) {
+                        setSortByDistance(false);
+                      } else {
+                        requestUserLocation(true);
+                      }
+                    }}
+                    disabled={isLocating}
+                    className={`absolute right-2.5 flex h-8 w-8 items-center justify-center rounded-xl transition-all ${
+                      sortByDistance
+                        ? "bg-signal text-signal-foreground shadow-sm"
+                        : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                    }`}
+                    title={
+                      sortByDistance
+                        ? "Mode terdekat aktif (klik untuk matikan)"
+                        : "Cari bengkel terdekat dari lokasi saya"
+                    }
+                    aria-label="Cari bengkel terdekat"
+                  >
+                    {isLocating ? (
+                      <Loader2 className="h-4 w-4 animate-spin text-signal" />
+                    ) : (
+                      <LocateFixed className="h-4 w-4" />
+                    )}
+                  </button>
                 </div>
               </div>
             </div>
@@ -361,16 +472,44 @@ function Index() {
               <span className="text-sm font-bold text-foreground">Wilayah Operasional:</span>
             </div>
 
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                size="sm"
+                variant={sortByDistance ? "default" : "outline"}
+                onClick={() => {
+                  if (sortByDistance) {
+                    setSortByDistance(false);
+                  } else {
+                    requestUserLocation(true);
+                  }
+                }}
+                disabled={isLocating}
+                className={`h-9 rounded-xl font-medium transition-all ${
+                  sortByDistance
+                    ? "bg-signal text-signal-foreground border-signal shadow-sm hover:bg-signal/90"
+                    : "border-signal/40 bg-signal/10 text-signal hover:bg-signal/20"
+                }`}
+              >
+                {isLocating ? (
+                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <LocateFixed className="mr-1.5 h-3.5 w-3.5" />
+                )}
+                Terdekat dari Saya
+              </Button>
+
               {AREAS.map((a) => {
                 const count = areaCounts[a] ?? 0;
-                const isActive = area === a;
+                const isActive = !sortByDistance && area === a;
                 return (
                   <Button
                     key={a}
                     size="sm"
                     variant={isActive ? "default" : "outline"}
-                    onClick={() => setArea(a)}
+                    onClick={() => {
+                      setArea(a);
+                      setSortByDistance(false);
+                    }}
                     className="h-9 rounded-xl font-medium"
                   >
                     {a}
@@ -496,6 +635,13 @@ function Index() {
                     dengan <span className="font-semibold text-signal">Promo Spesial</span>
                   </>
                 )}
+                {sortByDistance && (
+                  <>
+                    {" "}
+                    diurutkan dari{" "}
+                    <span className="font-semibold text-signal">jarak terdekat lokasi Anda</span>
+                  </>
+                )}
                 {parsedSearch.effectiveTokens.length > 0 && (
                   <>
                     {" "}
@@ -507,7 +653,18 @@ function Index() {
                 )}
               </p>
 
-              {parsedSearch.isGenericOnly && (
+              {parsedSearch.hasProximityIntent && (
+                <p className="mt-1 flex items-center gap-1.5 text-xs font-medium text-signal">
+                  <Sparkles className="h-3.5 w-3.5 shrink-0" />
+                  {sortByDistance
+                    ? "Mode pencarian terdekat aktif berdasarkan koordinat lokasi Anda."
+                    : isLocating
+                      ? "Sedang mendeteksi lokasi terkini Anda..."
+                      : "Mendeteksi pencarian terdekat — izinkan akses lokasi pada peramban untuk mengurutkan jarak."}
+                </p>
+              )}
+
+              {parsedSearch.isGenericOnly && !parsedSearch.hasProximityIntent && (
                 <p className="mt-1 flex items-center gap-1.5 text-xs font-medium text-signal">
                   <Sparkles className="h-3.5 w-3.5 shrink-0" />
                   Menampilkan semua bengkel — ketik layanan, nama, atau wilayah lanjutan untuk
@@ -616,6 +773,15 @@ function Index() {
                             <ShieldCheck className="mr-1 h-3 w-3 text-primary" /> Terverifikasi
                             PPBMR
                           </Badge>
+                          {typeof w.distance === "number" && (
+                            <Badge
+                              variant="secondary"
+                              className="border-emerald-500/30 bg-emerald-50 text-emerald-700 text-[10px] font-bold"
+                            >
+                              <LocateFixed className="mr-1 h-3 w-3 text-emerald-600" />
+                              {formatDistance(w.distance)} dari Anda
+                            </Badge>
+                          )}
                         </div>
 
                         <p className="mt-1 flex items-start gap-1.5 text-sm text-muted-foreground">
@@ -723,6 +889,11 @@ function Index() {
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-1.5 text-xs font-semibold text-signal-light">
                           <MapPin className="h-3 w-3" /> Titik Terpilih di Peta
+                          {typeof selected.distance === "number" && (
+                            <span className="ml-1 rounded bg-white/20 px-1.5 py-0.2 text-[10px] text-white font-bold">
+                              {formatDistance(selected.distance)} dari Anda
+                            </span>
+                          )}
                         </div>
                         <h4 className="mt-1 truncate font-display text-base font-extrabold sm:text-lg">
                           {selected.name}
