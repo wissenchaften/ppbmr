@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { parseMapsInfo } from "@/lib/maps";
 
 const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36";
@@ -26,6 +27,66 @@ function findLinks(html: string) {
     whatsapp: pick(/(wa\.me|api\.whatsapp\.com)\//i),
   };
 }
+
+/**
+ * Resolusi instan URL Google Maps (termasuk link pendek maps.app.goo.gl)
+ * untuk mendapatkan koordinat titik bisnis, nama tempat, dan place_id tanpa bergantung pada kuota AI.
+ */
+export const resolveMapsLink = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) => z.object({ mapsUrl: z.string().url().max(2000) }).parse(d))
+  .handler(async ({ data }) => {
+    let resolvedUrl = data.mapsUrl;
+    let mapsHtml = "";
+    try {
+      const r = await fetch(data.mapsUrl, {
+        redirect: "follow",
+        headers: { "User-Agent": UA, "Accept-Language": "id-ID,id" },
+      });
+      resolvedUrl = r.url || data.mapsUrl;
+      const html = await r.text();
+      mapsHtml = html.slice(0, 100000);
+    } catch {
+      /* abaikan kegagalan jaringan */
+    }
+
+    const info = parseMapsInfo(resolvedUrl);
+    let lat = info.lat;
+    let lng = info.lng;
+    let placeName = info.placeName;
+    const placeId = info.placeId;
+
+    if (!placeName && mapsHtml) {
+      const ogTitle =
+        mapsHtml.match(/<meta[^>]+property="og:title"[^>]+content="([^"]+)"/i) ||
+        mapsHtml.match(/<title>([^<]+)<\/title>/i);
+      if (ogTitle?.[1]) {
+        placeName = ogTitle[1]
+          .replace(/ - Google Maps$/i, "")
+          .replace(/ – Google Maps$/i, "")
+          .trim();
+      }
+    }
+
+    if ((lat == null || lng == null) && mapsHtml) {
+      const centerMatch =
+        mapsHtml.match(/center=(-?\d+(?:\.\d+)?)%2C(-?\d+(?:\.\d+)?)/i) ||
+        mapsHtml.match(/ll=(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/i) ||
+        mapsHtml.match(/@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/);
+      if (centerMatch?.[1] && centerMatch?.[2]) {
+        lat = Number(centerMatch[1]);
+        lng = Number(centerMatch[2]);
+      }
+    }
+
+    return {
+      resolvedUrl,
+      lat,
+      lng,
+      placeName,
+      placeId,
+    };
+  });
 
 export const autofillFromMaps = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])

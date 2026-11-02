@@ -86,7 +86,14 @@ function WorkshopPage() {
               <MapPin className="h-4 w-4" /> {w.address}
             </p>
           </div>
-          <DirectionsMenu lat={w.lat} lng={w.lng} size="lg" />
+          <DirectionsMenu
+            lat={w.lat}
+            lng={w.lng}
+            name={w.name}
+            address={w.address}
+            mapsUrl={w.maps_url ?? undefined}
+            size="lg"
+          />
         </div>
         <div className="stripe-signal h-2" />
       </section>
@@ -183,7 +190,7 @@ function WorkshopPage() {
           <div className="overflow-hidden rounded-2xl border shadow-card">
             <iframe
               title={`Peta ${w.name}`}
-              src={embedUrl(w.lat, w.lng, 16)}
+              src={embedUrl(w.lat, w.lng, 16, w.name)}
               className="h-80 w-full border-0"
               loading="lazy"
             />

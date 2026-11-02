@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Navigation, LocateFixed, MapPin, Loader2 } from "lucide-react";
+import { Navigation, LocateFixed, MapPin, Loader2, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { directionsUrl } from "@/lib/maps";
 import { toast } from "sonner";
@@ -7,17 +7,23 @@ import { toast } from "sonner";
 type Props = {
   lat: number;
   lng: number;
-  label?: string;
-  size?: "sm" | "default" | "lg";
-  variant?: "signal" | "default" | "outline";
-  className?: string;
-  stopPropagation?: boolean;
+  name?: string | undefined;
+  address?: string | undefined;
+  mapsUrl?: string | undefined;
+  label?: string | undefined;
+  size?: "sm" | "default" | "lg" | undefined;
+  variant?: "signal" | "default" | "outline" | undefined;
+  className?: string | undefined;
+  stopPropagation?: boolean | undefined;
 };
 
 /** Tombol petunjuk arah: pengunjung memilih titik awal — lokasi saat ini (izin lokasi) atau tentukan sendiri di Google Maps. */
 export function DirectionsMenu({
   lat,
   lng,
+  name,
+  address,
+  mapsUrl,
   label = "Petunjuk arah",
   size = "sm",
   variant = "signal",
@@ -38,7 +44,8 @@ export function DirectionsMenu({
   }, [open]);
 
   const openDirections = (origin?: { lat: number; lng: number }) => {
-    window.open(directionsUrl(lat, lng, origin), "_blank", "noreferrer");
+    const destinationName = name ? (address ? `${name}, ${address}` : name) : undefined;
+    window.open(directionsUrl(lat, lng, { origin, destinationName }), "_blank", "noreferrer");
     setOpen(false);
   };
 
@@ -90,6 +97,19 @@ export function DirectionsMenu({
             <MapPin className="h-4 w-4 shrink-0 text-primary" />
             Tentukan titik awal sendiri
           </button>
+          {mapsUrl && (
+            <button
+              type="button"
+              onClick={() => {
+                window.open(mapsUrl, "_blank", "noreferrer");
+                setOpen(false);
+              }}
+              className="flex w-full items-center gap-2 border-t px-4 py-3 text-left text-sm font-bold text-primary hover:bg-secondary"
+            >
+              <ExternalLink className="h-4 w-4 shrink-0 text-primary" />
+              Buka Profil Bisnis di Maps
+            </button>
+          )}
         </div>
       )}
     </div>
