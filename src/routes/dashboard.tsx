@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { toast } from "sonner";
 import {
   Building2,
@@ -18,6 +18,12 @@ import {
   Edit3,
   Trash2,
   Info,
+  CheckCircle2,
+  Tag,
+  Globe,
+  Eye,
+  MessageCircle,
+  Loader2,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
@@ -25,15 +31,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { WorkshopLogo } from "@/components/WorkshopLogo";
-import { parseMapsLink } from "@/lib/maps";
+import { parseMapsLink, businessMapsUrl } from "@/lib/maps";
 import { useServerFn } from "@tanstack/react-start";
-import { autofillFromMaps } from "@/lib/autofill.functions";
+import { autofillFromMaps, resolveMapsLink } from "@/lib/autofill.functions";
 import type { Tables } from "@/integrations/supabase/types";
 import { ImageUploader } from "@/components/ImageUploader";
 import { MarkdownEditor } from "@/components/MarkdownEditor";
 import { TagInput } from "@/components/TagInput";
 import { WorkshopLogoUploader } from "@/components/WorkshopLogoUploader";
+import { ChipInput } from "@/components/ChipInput";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { deleteArticleCover } from "@/lib/storage";
 import {
@@ -262,7 +270,115 @@ function Dashboard() {
   );
 }
 
-const AREAS = ["Kota Malang", "Kabupaten Malang", "Kota Batu"];
+const AREAS = ["Kota Malang", "Kabupaten Malang", "Kota Batu"] as const;
+
+const POPULAR_SERVICES = [
+  "Ganti Oli & Filter",
+  "Tune Up Mesin",
+  "Spooring & Balancing",
+  "Servis AC Mobil",
+  "Perbaikan Kaki-kaki",
+  "Overhaul Mesin",
+  "Kelistrikan & Audio",
+  "Rem & Kopling",
+  "Cat & Body Repair",
+  "Ganti Aki & Dinamo",
+];
+
+const POPULAR_BENEFITS = [
+  "Garansi Servis",
+  "Ruang Tunggu Ber-AC",
+  "Free Wi-Fi",
+  "Kopi & Teh Gratis",
+  "Ruang Tunggu Merokok",
+  "Musholla Nyaman",
+  "Gratis Cek 20 Titik Kendaraan",
+  "Layanan Antar-Jemput Mobil",
+  "Tersedia Pembayaran QRIS / Debit",
+];
+
+const HOURS_PRESETS = [
+  "Senin - Sabtu: 08.00–17.00",
+  "Setiap Hari: 08.00–17.00",
+  "Senin - Jumat: 08.00–16.00, Sabtu: 08.00–14.00",
+  "24 Jam (Layanan Panggilan Darurat)",
+];
+
+function cleanPhoneToWhatsapp(val: string): string {
+  const raw = val.trim();
+  if (!raw) return "";
+  if (raw.startsWith("https://wa.me/")) return raw;
+  const digits = raw.replace(/\D/g, "");
+  if (!digits) return "";
+  if (digits.startsWith("62")) return `https://wa.me/${digits}`;
+  if (digits.startsWith("0")) return `https://wa.me/62${digits.slice(1)}`;
+  return `https://wa.me/${digits}`;
+}
+
+function getPhoneDisplay(waUrl: string): string {
+  if (!waUrl) return "";
+  if (waUrl.startsWith("https://wa.me/")) {
+    const num = waUrl.replace("https://wa.me/", "");
+    if (num.startsWith("62")) return "0" + num.slice(2);
+    return num;
+  }
+  return waUrl;
+}
+
+function normalizeInstagram(val: string): string {
+  const t = val.trim();
+  if (!t) return "";
+  const match = t.match(/(?:instagram\.com\/)?@?([a-zA-Z0-9._]+)/);
+  return match ? `https://instagram.com/${match[1]}` : t;
+}
+
+function getInstagramHandle(val: string): string {
+  if (!val) return "";
+  return val.replace(/^https?:\/\/(?:www\.)?instagram\.com\//, "").replace(/^@/, "");
+}
+
+function normalizeTikTok(val: string): string {
+  const t = val.trim();
+  if (!t) return "";
+  const match = t.match(/(?:tiktok\.com\/)?@?([a-zA-Z0-9._]+)/);
+  return match ? `https://tiktok.com/@${match[1]}` : t;
+}
+
+function getTikTokHandle(val: string): string {
+  if (!val) return "";
+  return val.replace(/^https?:\/\/(?:www\.)?tiktok\.com\/@?/, "").replace(/^@/, "");
+}
+
+function normalizeYouTube(val: string): string {
+  const t = val.trim();
+  if (!t) return "";
+  if (t.startsWith("http://") || t.startsWith("https://")) return t;
+  return `https://youtube.com/@${t.replace(/^@/, "")}`;
+}
+
+function getYouTubeHandle(val: string): string {
+  if (!val) return "";
+  return val.replace(/^https?:\/\/(?:www\.)?youtube\.com\/@?/, "").replace(/^@/, "");
+}
+
+function normalizeFacebook(val: string): string {
+  const t = val.trim();
+  if (!t) return "";
+  if (t.startsWith("http://") || t.startsWith("https://")) return t;
+  return `https://facebook.com/${t}`;
+}
+
+function getFacebookHandle(val: string): string {
+  if (!val) return "";
+  return val.replace(/^https?:\/\/(?:www\.)?facebook\.com\//, "");
+}
+
+function normalizeWebsite(val: string): string {
+  const t = val.trim();
+  if (!t) return "";
+  if (t.startsWith("http://") || t.startsWith("https://")) return t;
+  return `https://${t}`;
+}
 
 function ProfileForm({ w, uid }: { w: Tables<"workshops">; uid: string }) {
   const qc = useQueryClient();
@@ -270,12 +386,12 @@ function ProfileForm({ w, uid }: { w: Tables<"workshops">; uid: string }) {
     name: "",
     address: "",
     area: "Kota Malang",
-    services: "",
+    services: [] as string[],
     maps_url: "",
     logo_url: "",
     organization_profile: "",
     description: "",
-    benefits: "",
+    benefits: [] as string[],
     phone: "",
     hours: "",
     website: "",
@@ -290,6 +406,7 @@ function ProfileForm({ w, uid }: { w: Tables<"workshops">; uid: string }) {
   };
 
   const [f, setF] = useState(empty);
+  const [isPromoActive, setIsPromoActive] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
@@ -297,12 +414,12 @@ function ProfileForm({ w, uid }: { w: Tables<"workshops">; uid: string }) {
       name: w.name,
       address: w.address,
       area: w.area,
-      services: w.services.join("\n"),
+      services: Array.isArray(w.services) ? w.services : [],
       maps_url: w.maps_url ?? "",
       logo_url: w.logo_url ?? "",
       organization_profile: w.organization_profile ?? "",
       description: w.description ?? "",
-      benefits: w.benefits.join("\n"),
+      benefits: Array.isArray(w.benefits) ? w.benefits : [],
       phone: w.phone ?? "",
       hours: w.hours ?? "",
       website: w.website ?? "",
@@ -315,11 +432,82 @@ function ProfileForm({ w, uid }: { w: Tables<"workshops">; uid: string }) {
       promo_title: w.promo_title ?? "",
       promo_text: w.promo_text ?? "",
     });
+    setIsPromoActive(Boolean(w.promo_title || w.promo_text));
   }, [w]);
 
   const runAutofill = useServerFn(autofillFromMaps);
+  const runResolveMaps = useServerFn(resolveMapsLink);
   const [filling, setFilling] = useState(false);
+  const [resolvingMaps, setResolvingMaps] = useState(false);
   const [resolved, setResolved] = useState("");
+  const [detectedBusinessName, setDetectedBusinessName] = useState<string | null>(null);
+
+  // Real-time Coordinate Detection from Maps Link
+  const parsedPoint = useMemo(() => {
+    if (f.maps_url.trim()) {
+      const pt = parseMapsLink(f.maps_url);
+      if (pt) return pt;
+    }
+    if (resolved) {
+      const pt = parseMapsLink(resolved);
+      if (pt) return pt;
+    }
+    if (w.lat != null && w.lng != null && !f.maps_url.trim()) {
+      return { lat: w.lat, lng: w.lng };
+    }
+    if (w.lat != null && w.lng != null && f.maps_url.trim() === (w.maps_url ?? "").trim()) {
+      return { lat: w.lat, lng: w.lng };
+    }
+    return null;
+  }, [f.maps_url, resolved, w.lat, w.lng, w.maps_url]);
+
+  // Resolusi link Google Maps (khususnya shortlink maps.app.goo.gl) ke target profil bisnis nyata
+  async function handleResolveMaps(urlToResolve?: string) {
+    const target = (urlToResolve ?? f.maps_url).trim();
+    if (!target) return;
+    setResolvingMaps(true);
+    try {
+      const res = await runResolveMaps({ data: { mapsUrl: target } });
+      if (res.resolvedUrl) {
+        setResolved(res.resolvedUrl);
+      }
+      if (res.placeName) {
+        setDetectedBusinessName(res.placeName);
+        if (!f.name.trim()) {
+          setF((prev) => ({ ...prev, name: res.placeName ?? prev.name }));
+        }
+      }
+      if (res.lat != null && res.lng != null) {
+        toast.success(
+          res.placeName
+            ? `Titik bisnis "${res.placeName}" berhasil terdeteksi!`
+            : "Titik koordinat berhasil dideteksi!",
+        );
+      }
+    } catch {
+      /* abaikan kegagalan jaringan */
+    } finally {
+      setResolvingMaps(false);
+    }
+  }
+
+  // Profile Completion Calculation
+  const completion = useMemo(() => {
+    const checks = [
+      { label: "Nama Bengkel", done: Boolean(f.name.trim()) },
+      { label: "Alamat Lengkap", done: Boolean(f.address.trim()) },
+      { label: "Logo Bengkel", done: Boolean(f.logo_url) },
+      { label: "Titik Lokasi Maps", done: Boolean(parsedPoint) },
+      { label: "Layanan Unggulan", done: f.services.length > 0 },
+      { label: "Nomor WhatsApp", done: Boolean(f.whatsapp.trim()) },
+      { label: "Jam Operasional", done: Boolean(f.hours.trim()) },
+      { label: "Deskripsi Slogan", done: Boolean(f.description.trim()) },
+    ];
+    const completed = checks.filter((c) => c.done).length;
+    const percentage = Math.round((completed / checks.length) * 100);
+    const missing = checks.filter((c) => !c.done).map((c) => c.label);
+    return { percentage, missing, completed, total: checks.length };
+  }, [f, parsedPoint]);
 
   async function autofill() {
     setFilling(true);
@@ -328,16 +516,17 @@ function ProfileForm({ w, uid }: { w: Tables<"workshops">; uid: string }) {
         data: { mapsUrl: f.maps_url.trim(), website: f.website.trim() || undefined },
       });
       const s = (k: string) => (typeof r[k] === "string" && (r[k] as string).trim()) || "";
-      const a = (k: string) => (Array.isArray(r[k]) ? (r[k] as string[]).join("\n") : "");
+      const a = (k: string) => (Array.isArray(r[k]) ? (r[k] as string[]) : []);
       setResolved(s("resolvedUrl"));
+
       setF((p) => ({
         ...p,
         name: s("name") || p.name,
         address: s("address") || p.address,
         phone: s("phone") || p.phone,
         hours: s("hours") || p.hours,
-        services: a("services") || p.services,
-        benefits: a("benefits") || p.benefits,
+        services: a("services").length > 0 ? a("services") : p.services,
+        benefits: a("benefits").length > 0 ? a("benefits") : p.benefits,
         organization_profile: s("organization_profile") || p.organization_profile,
         description: s("description") || p.description,
         profile_article: s("profile_article") || p.profile_article,
@@ -350,6 +539,9 @@ function ProfileForm({ w, uid }: { w: Tables<"workshops">; uid: string }) {
         tiktok: s("tiktok") || p.tiktok,
         whatsapp: s("whatsapp") || p.whatsapp,
       }));
+      if (s("promo_title") || s("promo_text")) {
+        setIsPromoActive(true);
+      }
       toast.success(
         s("website")
           ? "Profil berhasil diisi otomatis dari Google Maps & website bengkel!"
@@ -367,23 +559,29 @@ function ProfileForm({ w, uid }: { w: Tables<"workshops">; uid: string }) {
     let lat = w.lat;
     let lng = w.lng;
     if (f.maps_url.trim()) {
-      if (f.maps_url.trim() !== (w.maps_url ?? "").trim() || lat == null || lng == null) {
-        const point = parseMapsLink(f.maps_url) ?? (resolved ? parseMapsLink(resolved) : null);
-        if (!point) {
-          toast.error(
-            'Link peta tidak berisi titik lokasi. Klik "Isi otomatis" dulu atau tempel link Google Maps yang panjang.',
-          );
-          setIsSaving(false);
-          return;
+      let point = parseMapsLink(f.maps_url) ?? (resolved ? parseMapsLink(resolved) : null);
+      if (!point && f.maps_url.trim() !== (w.maps_url ?? "").trim()) {
+        try {
+          const res = await runResolveMaps({ data: { mapsUrl: f.maps_url.trim() } });
+          if (res.lat != null && res.lng != null) {
+            point = { lat: res.lat, lng: res.lng };
+            if (res.resolvedUrl) setResolved(res.resolvedUrl);
+            if (res.placeName) setDetectedBusinessName(res.placeName);
+          }
+        } catch {
+          /* ignore */
         }
+      }
+
+      if (point) {
         lat = point.lat;
         lng = point.lng;
-      } else if (resolved) {
-        const point = parseMapsLink(resolved);
-        if (point) {
-          lat = point.lat;
-          lng = point.lng;
-        }
+      } else if (lat == null || lng == null) {
+        toast.error(
+          "Link peta tidak berisi titik lokasi. Tempel link Google Maps yang valid atau klik tombol Deteksi Titik.",
+        );
+        setIsSaving(false);
+        return;
       }
     }
 
@@ -393,31 +591,25 @@ function ProfileForm({ w, uid }: { w: Tables<"workshops">; uid: string }) {
         name: f.name.trim() || w.name,
         address: f.address.trim() || w.address,
         area: f.area,
-        services: f.services
-          .split("\n")
-          .map((s) => s.trim())
-          .filter(Boolean),
+        services: f.services.filter(Boolean),
         maps_url: f.maps_url.trim() || null,
         lat,
         lng,
         logo_url: f.logo_url || null,
-        organization_profile: f.organization_profile,
-        description: f.description,
-        benefits: f.benefits
-          .split("\n")
-          .map((s) => s.trim())
-          .filter(Boolean),
-        phone: f.phone,
-        hours: f.hours,
-        website: f.website.trim() || null,
-        instagram: f.instagram.trim() || null,
-        facebook: f.facebook.trim() || null,
-        youtube: f.youtube.trim() || null,
-        tiktok: f.tiktok.trim() || null,
-        whatsapp: f.whatsapp.trim() || null,
+        organization_profile: f.organization_profile.trim() || null,
+        description: f.description.trim() || null,
+        benefits: f.benefits.filter(Boolean),
+        phone: f.phone.trim() || null,
+        hours: f.hours.trim() || null,
+        website: normalizeWebsite(f.website) || null,
+        instagram: normalizeInstagram(f.instagram) || null,
+        facebook: normalizeFacebook(f.facebook) || null,
+        youtube: normalizeYouTube(f.youtube) || null,
+        tiktok: normalizeTikTok(f.tiktok) || null,
+        whatsapp: cleanPhoneToWhatsapp(f.whatsapp) || null,
         profile_article: f.profile_article.trim() || null,
-        promo_title: f.promo_title.trim() || null,
-        promo_text: f.promo_text.trim() || null,
+        promo_title: isPromoActive ? f.promo_title.trim() || null : null,
+        promo_text: isPromoActive ? f.promo_text.trim() || null : null,
       })
       .eq("id", w.id);
 
@@ -426,14 +618,64 @@ function ProfileForm({ w, uid }: { w: Tables<"workshops">; uid: string }) {
       toast.error(error.message);
       return;
     }
-    toast.success("Profil bengkel berhasil disimpan!");
+    toast.success("Profil bengkel berhasil diperbarui!");
     qc.invalidateQueries();
   }
 
+  const rawWaNumber = getPhoneDisplay(f.whatsapp);
+  const waTestLink = cleanPhoneToWhatsapp(f.whatsapp);
+
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 pb-16">
+      {/* Profile Completion Header Progress */}
+      <div className="rounded-2xl border border-border bg-card p-4 sm:p-5 shadow-2xs space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-signal" />
+            <span className="font-extrabold text-sm text-foreground">
+              Tingkat Kelengkapan Profil Bengkel:
+            </span>
+            <span
+              className={`font-black text-sm px-2 py-0.5 rounded-full ${
+                completion.percentage === 100
+                  ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+                  : completion.percentage >= 60
+                    ? "bg-amber-500/10 text-amber-700 dark:text-amber-400"
+                    : "bg-destructive/10 text-destructive"
+              }`}
+            >
+              {completion.percentage}%
+            </span>
+          </div>
+          <span className="text-xs text-muted-foreground">
+            {completion.completed} dari {completion.total} informasi utama terisi
+          </span>
+        </div>
+
+        {/* Progress Bar */}
+        <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+          <div
+            className={`h-full transition-all duration-500 rounded-full ${
+              completion.percentage === 100
+                ? "bg-emerald-500"
+                : completion.percentage >= 60
+                  ? "bg-primary"
+                  : "bg-amber-500"
+            }`}
+            style={{ width: `${completion.percentage}%` }}
+          />
+        </div>
+
+        {completion.missing.length > 0 && (
+          <p className="text-xs text-muted-foreground">
+            Saran untuk melengkapi:{" "}
+            <span className="text-foreground font-medium">{completion.missing.join(", ")}</span>
+          </p>
+        )}
+      </div>
+
       {/* Kartu 1: Identitas & Lokasi */}
-      <section className="rounded-2xl border border-border bg-card p-6 shadow-xs space-y-4">
+      <section className="rounded-2xl border border-border bg-card p-6 shadow-xs space-y-5">
         <div className="flex items-center gap-2 border-b pb-3">
           <div className="rounded-lg bg-primary/10 p-2 text-primary">
             <Building2 className="h-5 w-5" />
@@ -441,78 +683,157 @@ function ProfileForm({ w, uid }: { w: Tables<"workshops">; uid: string }) {
           <div>
             <h2 className="text-lg font-black text-foreground">Identitas & Lokasi Bengkel</h2>
             <p className="text-xs text-muted-foreground">
-              Informasi nama resmi, logo, wilayah, dan titik koordinat peta.
+              Informasi nama resmi, logo, wilayah operasional, dan titik navigasi peta.
             </p>
           </div>
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <div>
-            <Label className="mb-1.5 block">Nama Bengkel</Label>
+          <div className="sm:col-span-2">
+            <Label className="mb-1.5 block font-bold">Nama Bengkel</Label>
             <Input
               value={f.name}
               onChange={(e) => setF({ ...f, name: e.target.value })}
-              placeholder="Nama bengkel Anda"
+              placeholder="Nama resmi bengkel Anda"
+              className="text-sm"
             />
           </div>
 
-          <div>
-            <Label className="mb-1.5 block">Wilayah / Area</Label>
-            <select
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-              value={f.area}
-              onChange={(e) => setF({ ...f, area: e.target.value })}
-            >
-              {AREAS.map((a) => (
-                <option key={a} value={a}>
-                  {a}
-                </option>
-              ))}
-            </select>
+          <div className="sm:col-span-2 space-y-1.5">
+            <Label className="block font-bold">Wilayah Operasional</Label>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              {AREAS.map((areaOption) => {
+                const isSelected = f.area === areaOption;
+                return (
+                  <button
+                    key={areaOption}
+                    type="button"
+                    onClick={() => setF({ ...f, area: areaOption })}
+                    className={`flex items-center justify-between rounded-xl border p-3 text-left transition-all ${
+                      isSelected
+                        ? "border-primary bg-primary/5 text-primary ring-1 ring-primary shadow-xs font-bold"
+                        : "border-border bg-card hover:bg-muted/50 text-foreground"
+                    }`}
+                  >
+                    <span className="text-xs">{areaOption}</span>
+                    <div
+                      className={`h-4 w-4 rounded-full border flex items-center justify-center ${
+                        isSelected ? "border-primary bg-primary" : "border-muted-foreground/40"
+                      }`}
+                    >
+                      {isSelected && <div className="h-1.5 w-1.5 rounded-full bg-white" />}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           <div className="sm:col-span-2">
-            <Label className="mb-1.5 block">Alamat Lengkap</Label>
+            <Label className="mb-1.5 block font-bold">Alamat Lengkap</Label>
             <Input
               value={f.address}
               onChange={(e) => setF({ ...f, address: e.target.value })}
-              placeholder="Contoh: Jl. Soekarno Hatta No. 12, Lowokwaru"
+              placeholder="Contoh: Jl. Soekarno Hatta No. 12, Lowokwaru, Kota Malang"
+              className="text-sm"
             />
           </div>
 
-          <div className="sm:col-span-2">
-            <div className="flex items-center justify-between mb-1.5">
-              <Label>Link Google Maps / Google Bisnisku</Label>
-              <span className="text-xs text-muted-foreground">Otomatis mengisi data bengkel</span>
+          <div className="sm:col-span-2 space-y-2">
+            <div className="flex items-center justify-between">
+              <Label className="font-bold">Link Google Maps / Google Bisnisku</Label>
+              <span className="text-xs text-muted-foreground">
+                Mendeteksi profil & koordinat bisnis
+              </span>
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-col sm:flex-row gap-2">
               <Input
-                placeholder="https://maps.app.goo.gl/… atau https://www.google.com/maps/place/…"
+                placeholder="https://maps.app.goo.gl/… atau link tempat Google Maps"
                 value={f.maps_url}
                 onChange={(e) => setF({ ...f, maps_url: e.target.value })}
                 onBlur={() => {
-                  if (f.maps_url.trim() && f.maps_url !== (w.maps_url ?? "")) void autofill();
+                  if (f.maps_url.trim() && f.maps_url !== (w.maps_url ?? "")) {
+                    void handleResolveMaps();
+                  }
                 }}
+                className="text-xs flex-1"
               />
-              <Button
-                type="button"
-                variant="outline"
-                disabled={filling || !f.maps_url.trim()}
-                onClick={() => void autofill()}
-                className="shrink-0 gap-1.5"
-              >
-                <Sparkles className="h-4 w-4 text-signal" />
-                {filling ? "Mengisi…" : "Isi Otomatis"}
-              </Button>
+              <div className="flex items-center gap-2 shrink-0">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={resolvingMaps || !f.maps_url.trim()}
+                  onClick={() => void handleResolveMaps()}
+                  className="gap-1.5 text-xs font-bold h-9"
+                  title="Deteksi titik koordinat dan nama bisnis dari link Maps"
+                >
+                  {resolvingMaps ? (
+                    <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                  ) : (
+                    <Sparkles className="h-4 w-4 text-primary" />
+                  )}
+                  {resolvingMaps ? "Mendeteksi…" : "Deteksi Titik"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={filling || !f.maps_url.trim()}
+                  onClick={() => void autofill()}
+                  className="gap-1.5 text-xs font-bold h-9"
+                  title="Isi otomatis seluruh data profil bengkel menggunakan AI"
+                >
+                  <Sparkles className="h-4 w-4 text-signal" />
+                  {filling ? "Mengisi…" : "Isi Otomatis (AI)"}
+                </Button>
+              </div>
             </div>
-            <p className="mt-1.5 text-xs text-muted-foreground">
-              Tempel link Google Maps untuk menentukan titik arah navigasi. Jika bengkel Anda
-              memiliki Google Business Profile, sistem akan mengekstrak informasi secara otomatis.
-            </p>
+
+            {/* Coordinate & Business Status Feedback */}
+            <div className="flex flex-wrap items-center gap-2 pt-0.5">
+              {parsedPoint ? (
+                <>
+                  <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-2.5 py-1">
+                    <CheckCircle2 className="h-3.5 w-3.5" /> Titik Bisnis Terhubung:{" "}
+                    <span className="font-bold text-foreground">
+                      {detectedBusinessName || f.name || "Titik Peta"}
+                    </span>{" "}
+                    <span className="font-mono text-[11px] opacity-80">
+                      ({parsedPoint.lat.toFixed(6)}, {parsedPoint.lng.toFixed(6)})
+                    </span>
+                  </span>
+                  <a
+                    href={businessMapsUrl({
+                      mapsUrl: resolved || f.maps_url,
+                      name: detectedBusinessName || f.name || w.name,
+                      address: f.address || w.address,
+                      lat: parsedPoint.lat,
+                      lng: parsedPoint.lng,
+                    })}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 text-xs text-primary hover:underline font-bold"
+                  >
+                    <ExternalLink className="h-3 w-3" /> Uji Titik Bisnis di Google Maps
+                  </a>
+                </>
+              ) : resolvingMaps ? (
+                <span className="inline-flex items-center gap-1.5 text-xs text-primary bg-primary/10 border border-primary/20 rounded-lg px-2.5 py-1">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Mendeteksi profil bisnis dari
+                  link Google Maps…
+                </span>
+              ) : f.maps_url.trim() ? (
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex items-center gap-1.5 text-xs text-amber-700 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg px-2.5 py-1">
+                    <AlertCircle className="h-3.5 w-3.5" /> Link belum terurai. Klik &quot;Deteksi
+                    Titik&quot; untuk mengurai koordinat bisnis.
+                  </span>
+                </div>
+              ) : null}
+            </div>
           </div>
 
-          <div className="sm:col-span-2">
-            <Label className="mb-1.5 block">Logo Bengkel</Label>
+          <div className="sm:col-span-2 pt-1">
+            <Label className="mb-1.5 block font-bold">Logo Bengkel</Label>
             <WorkshopLogoUploader
               value={f.logo_url}
               onChange={(url) => setF({ ...f, logo_url: url })}
@@ -526,7 +847,7 @@ function ProfileForm({ w, uid }: { w: Tables<"workshops">; uid: string }) {
       </section>
 
       {/* Kartu 2: Layanan & Jam Operasional */}
-      <section className="rounded-2xl border border-border bg-card p-6 shadow-xs space-y-4">
+      <section className="rounded-2xl border border-border bg-card p-6 shadow-xs space-y-5">
         <div className="flex items-center gap-2 border-b pb-3">
           <div className="rounded-lg bg-primary/10 p-2 text-primary">
             <Clock className="h-5 w-5" />
@@ -534,58 +855,78 @@ function ProfileForm({ w, uid }: { w: Tables<"workshops">; uid: string }) {
           <div>
             <h2 className="text-lg font-black text-foreground">Layanan & Jam Operasional</h2>
             <p className="text-xs text-muted-foreground">
-              Jadwal buka dan daftar spesialisasi servis yang ditawarkan.
+              Jadwal buka dan daftar spesialisasi servis serta fasilitas yang ditawarkan.
             </p>
           </div>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div>
-            <Label className="mb-1.5 block">Jam Operasional</Label>
+        <div className="grid gap-5 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label className="block font-bold">Jam Operasional</Label>
             <Input
-              placeholder="Contoh: 08.00–17.00"
+              placeholder="Contoh: Senin - Sabtu: 08.00–17.00"
               value={f.hours}
               onChange={(e) => setF({ ...f, hours: e.target.value })}
+              className="text-xs"
             />
+            {/* Quick Hours Presets */}
+            <div className="space-y-1 pt-1">
+              <span className="text-[11px] text-muted-foreground block font-medium">
+                Pilihan jadwal cepat:
+              </span>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {HOURS_PRESETS.map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => setF({ ...f, hours: preset })}
+                    className="rounded-full border border-dashed border-border bg-muted/40 hover:bg-muted hover:text-foreground px-2.5 py-0.5 text-[10px] text-muted-foreground transition-colors"
+                  >
+                    {preset}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
 
           <div>
-            <Label className="mb-1.5 block">Deskripsi Singkat / Slogan</Label>
+            <Label className="mb-1.5 block font-bold">Deskripsi Singkat / Slogan</Label>
             <Input
-              placeholder="Contoh: Spesialis kaki-kaki & AC mobil terpercaya"
+              placeholder="Contoh: Spesialis kaki-kaki & AC mobil terpercaya di Malang"
               value={f.description}
               onChange={(e) => setF({ ...f, description: e.target.value })}
+              className="text-xs"
             />
           </div>
 
-          <div className="sm:col-span-2">
-            <Label className="mb-1.5 block">Layanan Unggulan (Satu layanan per baris)</Label>
-            <Textarea
-              rows={4}
-              value={f.services}
-              onChange={(e) => setF({ ...f, services: e.target.value })}
-              placeholder={"Ganti Oli & Filter\nTune Up Mesin\nSpooring & Balancing\nServis AC"}
-            />
-          </div>
-
-          <div className="sm:col-span-2">
-            <Label className="mb-1.5 block">
-              Fasilitas & Keuntungan Pelanggan (Satu per baris)
+          <div className="sm:col-span-2 space-y-1.5">
+            <Label className="block font-bold">
+              Layanan Unggulan ({f.services.length} Layanan Ditambahkan)
             </Label>
-            <Textarea
-              rows={3}
-              value={f.benefits}
-              onChange={(e) => setF({ ...f, benefits: e.target.value })}
-              placeholder={
-                "Garansi Servis 14 Hari\nRuang Tunggu Ber-AC & WiFi\nGratis Cek 20 Titik Kendaraan"
-              }
+            <ChipInput
+              items={f.services}
+              onChange={(items) => setF({ ...f, services: items })}
+              suggestions={POPULAR_SERVICES}
+              placeholder="Ketik layanan servis baru (misal: Tune Up Mesin) lalu tekan Enter..."
+            />
+          </div>
+
+          <div className="sm:col-span-2 space-y-1.5">
+            <Label className="block font-bold">
+              Fasilitas & Keuntungan Pelanggan ({f.benefits.length} Fasilitas Ditambahkan)
+            </Label>
+            <ChipInput
+              items={f.benefits}
+              onChange={(items) => setF({ ...f, benefits: items })}
+              suggestions={POPULAR_BENEFITS}
+              placeholder="Ketik fasilitas baru (misal: Ruang Tunggu Ber-AC) lalu tekan Enter..."
             />
           </div>
         </div>
       </section>
 
       {/* Kartu 3: Kontak & Media Sosial */}
-      <section className="rounded-2xl border border-border bg-card p-6 shadow-xs space-y-4">
+      <section className="rounded-2xl border border-border bg-card p-6 shadow-xs space-y-5">
         <div className="flex items-center gap-2 border-b pb-3">
           <div className="rounded-lg bg-primary/10 p-2 text-primary">
             <Share2 className="h-5 w-5" />
@@ -599,73 +940,129 @@ function ProfileForm({ w, uid }: { w: Tables<"workshops">; uid: string }) {
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <div>
-            <Label className="mb-1.5 block">WhatsApp (Format: https://wa.me/628...)</Label>
-            <Input
-              placeholder="https://wa.me/628123456789"
-              value={f.whatsapp}
-              onChange={(e) => setF({ ...f, whatsapp: e.target.value })}
-            />
+          {/* WhatsApp with Smart Format & Test Chat Button */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <Label className="font-bold flex items-center gap-1.5">
+                <MessageCircle className="h-4 w-4 text-emerald-600" /> WhatsApp Bengkel
+              </Label>
+              {f.whatsapp.trim() && (
+                <a
+                  href={waTestLink}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 hover:underline"
+                >
+                  <ExternalLink className="h-3 w-3" /> Tes Chat WA
+                </a>
+              )}
+            </div>
+            <div className="relative">
+              <Input
+                placeholder="08123456789 atau 628123456789"
+                value={rawWaNumber}
+                onChange={(e) => setF({ ...f, whatsapp: e.target.value })}
+                className="text-xs font-mono"
+              />
+            </div>
+            <span className="text-[11px] text-muted-foreground block">
+              Cukup ketik nomor biasa (misal 0812...), sistem otomatis mengubahnya menjadi tautan
+              chat wa.me.
+            </span>
           </div>
 
           <div>
-            <Label className="mb-1.5 block">Nomor Telepon Kantor / Bengkel</Label>
+            <Label className="mb-1.5 block font-bold flex items-center gap-1.5">
+              <Phone className="h-4 w-4 text-primary" /> Nomor Telepon Kantor / Bengkel
+            </Label>
             <Input
-              placeholder="0341-555101"
+              placeholder="0341-555101 atau 0812..."
               value={f.phone}
               onChange={(e) => setF({ ...f, phone: e.target.value })}
+              className="text-xs"
             />
           </div>
 
           <div>
-            <Label className="mb-1.5 block">Website Resmi</Label>
+            <Label className="mb-1.5 block font-bold flex items-center gap-1.5">
+              <Globe className="h-4 w-4 text-muted-foreground" /> Website Resmi
+            </Label>
             <Input
-              placeholder="https://bengkelanda.com"
+              placeholder="bengkelanda.com"
               value={f.website}
               onChange={(e) => setF({ ...f, website: e.target.value })}
+              className="text-xs"
             />
           </div>
 
           <div>
-            <Label className="mb-1.5 block">Instagram</Label>
-            <Input
-              placeholder="https://instagram.com/bengkelanda"
-              value={f.instagram}
-              onChange={(e) => setF({ ...f, instagram: e.target.value })}
-            />
+            <Label className="mb-1.5 block font-bold">Instagram (Username)</Label>
+            <div className="flex items-center rounded-md border border-input bg-background shadow-xs focus-within:ring-1 focus-within:ring-ring">
+              <span className="px-2.5 text-xs text-muted-foreground select-none font-mono">
+                instagram.com/
+              </span>
+              <input
+                type="text"
+                placeholder="nama_bengkel"
+                value={getInstagramHandle(f.instagram)}
+                onChange={(e) => setF({ ...f, instagram: e.target.value })}
+                className="flex-1 bg-transparent py-2 pr-3 text-xs outline-none"
+              />
+            </div>
           </div>
 
           <div>
-            <Label className="mb-1.5 block">Facebook</Label>
-            <Input
-              placeholder="https://facebook.com/bengkelanda"
-              value={f.facebook}
-              onChange={(e) => setF({ ...f, facebook: e.target.value })}
-            />
+            <Label className="mb-1.5 block font-bold">TikTok (Username)</Label>
+            <div className="flex items-center rounded-md border border-input bg-background shadow-xs focus-within:ring-1 focus-within:ring-ring">
+              <span className="px-2.5 text-xs text-muted-foreground select-none font-mono">
+                tiktok.com/@
+              </span>
+              <input
+                type="text"
+                placeholder="nama_bengkel"
+                value={getTikTokHandle(f.tiktok)}
+                onChange={(e) => setF({ ...f, tiktok: e.target.value })}
+                className="flex-1 bg-transparent py-2 pr-3 text-xs outline-none"
+              />
+            </div>
           </div>
 
           <div>
-            <Label className="mb-1.5 block">YouTube</Label>
-            <Input
-              placeholder="https://youtube.com/@bengkelanda"
-              value={f.youtube}
-              onChange={(e) => setF({ ...f, youtube: e.target.value })}
-            />
+            <Label className="mb-1.5 block font-bold">YouTube (Channel / Handle)</Label>
+            <div className="flex items-center rounded-md border border-input bg-background shadow-xs focus-within:ring-1 focus-within:ring-ring">
+              <span className="px-2.5 text-xs text-muted-foreground select-none font-mono">
+                youtube.com/@
+              </span>
+              <input
+                type="text"
+                placeholder="bengkelchannel"
+                value={getYouTubeHandle(f.youtube)}
+                onChange={(e) => setF({ ...f, youtube: e.target.value })}
+                className="flex-1 bg-transparent py-2 pr-3 text-xs outline-none"
+              />
+            </div>
           </div>
 
           <div className="sm:col-span-2">
-            <Label className="mb-1.5 block">TikTok</Label>
-            <Input
-              placeholder="https://tiktok.com/@bengkelanda"
-              value={f.tiktok}
-              onChange={(e) => setF({ ...f, tiktok: e.target.value })}
-            />
+            <Label className="mb-1.5 block font-bold">Facebook (Halaman / Profil)</Label>
+            <div className="flex items-center rounded-md border border-input bg-background shadow-xs focus-within:ring-1 focus-within:ring-ring">
+              <span className="px-2.5 text-xs text-muted-foreground select-none font-mono">
+                facebook.com/
+              </span>
+              <input
+                type="text"
+                placeholder="bengkel.official"
+                value={getFacebookHandle(f.facebook)}
+                onChange={(e) => setF({ ...f, facebook: e.target.value })}
+                className="flex-1 bg-transparent py-2 pr-3 text-xs outline-none"
+              />
+            </div>
           </div>
         </div>
       </section>
 
-      {/* Kartu 4: Promo Hari Ini & Cerita Profil */}
-      <section className="rounded-2xl border border-border bg-card p-6 shadow-xs space-y-4">
+      {/* Kartu 4: Promo Hari Ini & Cerita Bengkel */}
+      <section className="rounded-2xl border border-border bg-card p-6 shadow-xs space-y-5">
         <div className="flex items-center gap-2 border-b pb-3">
           <div className="rounded-lg bg-primary/10 p-2 text-primary">
             <FileText className="h-5 w-5" />
@@ -673,64 +1070,126 @@ function ProfileForm({ w, uid }: { w: Tables<"workshops">; uid: string }) {
           <div>
             <h2 className="text-lg font-black text-foreground">Promo Hari Ini & Cerita Bengkel</h2>
             <p className="text-xs text-muted-foreground">
-              Sorotan penawaran spesial dan artikel narasi profil bengkel Anda.
+              Sorotan penawaran khusus dan artikel narasi profil bengkel Anda.
             </p>
           </div>
         </div>
 
-        <div className="space-y-4">
-          <div>
-            <Label className="mb-1.5 block">Judul Promo Spesial</Label>
-            <Input
-              placeholder="Contoh: Diskon 20% Tune Up & Cek Rem Gratis!"
-              value={f.promo_title}
-              onChange={(e) => setF({ ...f, promo_title: e.target.value })}
+        <div className="space-y-5">
+          {/* Promo Toggle Switch */}
+          <div className="flex items-center justify-between rounded-xl border border-border bg-muted/20 p-4">
+            <div className="space-y-0.5">
+              <span className="font-bold text-sm text-foreground flex items-center gap-1.5">
+                <Tag className="h-4 w-4 text-signal" /> Program Promo Spesial Hari Ini
+              </span>
+              <p className="text-xs text-muted-foreground">
+                Aktifkan jika bengkel sedang mengadakan diskon atau penawaran servis khusus.
+              </p>
+            </div>
+            <Switch
+              checked={isPromoActive}
+              onCheckedChange={setIsPromoActive}
+              aria-label="Aktifkan Promo"
             />
           </div>
 
-          <div>
-            <Label className="mb-1.5 block">Detail Isi Promo</Label>
-            <Textarea
-              rows={3}
-              placeholder="Rincian syarat dan ketentuan promo yang sedang berlangsung..."
-              value={f.promo_text}
-              onChange={(e) => setF({ ...f, promo_text: e.target.value })}
-            />
-          </div>
+          {/* Promo Form & Live Preview Banner */}
+          {isPromoActive && (
+            <div className="space-y-4 rounded-xl border border-signal/30 bg-signal/5 p-4 animate-in fade-in-50 duration-200">
+              <div>
+                <Label className="mb-1.5 block font-bold text-xs">Judul Promo Spesial</Label>
+                <Input
+                  placeholder="Contoh: Diskon 20% Tune Up & Cek Rem Gratis!"
+                  value={f.promo_title}
+                  onChange={(e) => setF({ ...f, promo_title: e.target.value })}
+                  className="text-xs bg-background"
+                />
+              </div>
 
-          <div>
-            <Label className="mb-1.5 block">Artikel Profil Bengkel (Cerita & Sejarah)</Label>
+              <div>
+                <Label className="mb-1.5 block font-bold text-xs">
+                  Detail Isi Promo (Syarat & Ketentuan)
+                </Label>
+                <Textarea
+                  rows={2}
+                  placeholder="Rincian ketentuan promo, periode berlaku, atau syarat mobil..."
+                  value={f.promo_text}
+                  onChange={(e) => setF({ ...f, promo_text: e.target.value })}
+                  className="text-xs bg-background"
+                />
+              </div>
+
+              {/* Live Preview Card */}
+              <div className="rounded-xl bg-signal p-4 text-signal-foreground shadow-card space-y-1.5">
+                <span className="flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider">
+                  <Tag className="h-3 w-3" /> Pratinjau Tampilan Promo di Halaman Publik
+                </span>
+                <h3 className="text-lg font-black">{f.promo_title || "Judul Promo Spesial"}</h3>
+                <p className="text-xs opacity-95">
+                  {f.promo_text || "Detail syarat dan ketentuan penawaran promo..."}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Story & History Article */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <Label className="font-bold">Artikel Profil Bengkel (Cerita & Sejarah)</Label>
+              <span className="text-[11px] text-muted-foreground">
+                {f.profile_article.length} karakter ·{" "}
+                {f.profile_article.trim() ? f.profile_article.trim().split(/\s+/).length : 0} kata
+              </span>
+            </div>
             <Textarea
-              rows={6}
-              placeholder="Ceritakan sejarah bengkel, keahlian para mekanik, komitmen kepuasan pelanggan, dan fasilitas unggulan..."
+              rows={5}
+              placeholder="Ceritakan sejarah berdirinya bengkel, pengalaman para teknisi, spesialisasi mobil, dan komitmen layanan untuk pelanggan..."
               value={f.profile_article}
               onChange={(e) => setF({ ...f, profile_article: e.target.value })}
+              className="text-xs leading-relaxed"
             />
           </div>
 
           <div>
-            <Label className="mb-1.5 block">Profil Organisasi PPBMR</Label>
+            <Label className="mb-1.5 block font-bold">Profil Organisasi PPBMR</Label>
             <Textarea
-              rows={3}
-              placeholder="Catatan keanggotaan dan sertifikasi PPBMR..."
+              rows={2}
+              placeholder="Catatan keanggotaan PPBMR (misal: Anggota Wilayah Barat, sertifikasi mekanik)..."
               value={f.organization_profile}
               onChange={(e) => setF({ ...f, organization_profile: e.target.value })}
+              className="text-xs"
             />
           </div>
         </div>
       </section>
 
-      {/* Action Save Button */}
-      <div className="flex justify-end pt-2">
-        <Button
-          size="lg"
-          variant="signal"
-          onClick={save}
-          disabled={isSaving}
-          className="font-bold px-8 shadow-xs"
-        >
-          {isSaving ? "Menyimpan Perubahan…" : "Simpan Profil Bengkel"}
-        </Button>
+      {/* Sticky Bottom Action Bar */}
+      <div className="sticky bottom-4 z-20 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-card/95 p-3.5 shadow-card backdrop-blur-md">
+        <div className="flex items-center gap-2">
+          <div className="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse" />
+          <span className="text-xs font-bold text-foreground">
+            {isSaving ? "Menyimpan perubahan profil…" : "Perubahan belum disimpan ke server"}
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          {w.slug && (
+            <Button asChild size="sm" variant="outline" className="gap-1.5 text-xs font-bold h-9">
+              <Link to="/bengkel/$slug" params={{ slug: w.slug }} target="_blank">
+                <Eye className="h-3.5 w-3.5" /> Lihat Halaman Publik
+              </Link>
+            </Button>
+          )}
+          <Button
+            size="sm"
+            variant="signal"
+            disabled={isSaving}
+            onClick={() => void save()}
+            className="gap-1.5 text-xs font-bold px-5 h-9 shadow-xs"
+          >
+            <CheckCircle2 className="h-4 w-4" />
+            {isSaving ? "Menyimpan…" : "Simpan Profil Bengkel"}
+          </Button>
+        </div>
       </div>
     </div>
   );
