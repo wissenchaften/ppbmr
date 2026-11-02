@@ -49,3 +49,67 @@ export function stripMarkdownExcerpt(content: string, maxLen = 120): string {
     .trim();
   return plain.length > maxLen ? `${plain.slice(0, maxLen)}…` : plain;
 }
+
+/**
+ * Generic directory category stopwords.
+ * Typing these alone will display all workshops, and typing them followed by
+ * another keyword will strip them and match on the subsequent keywords.
+ */
+export const CATEGORY_STOPWORDS = new Set(["bengkel", "mobil"]);
+
+export interface ParsedSearchQuery {
+  rawQuery: string;
+  effectiveTokens: string[];
+  isGenericOnly: boolean;
+}
+
+/**
+ * Parses user search query:
+ * - Lowercases and trims input.
+ * - Extracts tokens.
+ * - Identifies whether the search contains only generic category stopwords.
+ * - Isolates effective search tokens.
+ */
+export function parseSearchQuery(query: string): ParsedSearchQuery {
+  const trimmed = query.trim().toLowerCase();
+  if (!trimmed) {
+    return { rawQuery: "", effectiveTokens: [], isGenericOnly: false };
+  }
+
+  const allTokens = trimmed.split(/\s+/).filter(Boolean);
+  const effectiveTokens = allTokens.filter((token) => !CATEGORY_STOPWORDS.has(token));
+
+  const isGenericOnly = allTokens.length > 0 && effectiveTokens.length === 0;
+
+  return {
+    rawQuery: trimmed,
+    effectiveTokens,
+    isGenericOnly,
+  };
+}
+
+/**
+ * Checks if a workshop matches the parsed search query using flexible multi-token AND logic.
+ */
+export function matchesWorkshopSearch(
+  workshop: {
+    name: string;
+    address: string;
+    area?: string | null;
+    services: string[];
+    description?: string | null;
+  },
+  parsed: ParsedSearchQuery,
+): boolean {
+  // If query is empty or purely generic stopwords ("bengkel", "mobil", "bengkel mobil"),
+  // all workshops match!
+  if (parsed.effectiveTokens.length === 0) {
+    return true;
+  }
+
+  const searchableText =
+    `${workshop.name} ${workshop.address} ${workshop.area ?? ""} ${workshop.services.join(" ")} ${workshop.description ?? ""}`.toLowerCase();
+
+  // Multi-token AND logic: every effective token must be present in the workshop details
+  return parsed.effectiveTokens.every((token) => searchableText.includes(token));
+}

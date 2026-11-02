@@ -28,7 +28,13 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { embedUrl } from "@/lib/maps";
 import { DirectionsMenu } from "@/components/DirectionsMenu";
-import { buildWhatsAppUrl, formatDate, stripMarkdownExcerpt } from "@/lib/index-helpers";
+import {
+  buildWhatsAppUrl,
+  formatDate,
+  stripMarkdownExcerpt,
+  parseSearchQuery,
+  matchesWorkshopSearch,
+} from "@/lib/index-helpers";
 import logo from "@/assets/ppbmr-logo.webp.asset.json";
 
 export const Route = createFileRoute("/")({
@@ -129,9 +135,11 @@ function Index() {
     return workshops.filter((w) => Boolean(w.promo_title && w.promo_title.trim())).length;
   }, [workshops]);
 
+  // Parsing Kata Kunci Pencarian (Smart Keyword & Category Stopwords)
+  const parsedSearch = useMemo(() => parseSearchQuery(q), [q]);
+
   // Hasil Filter Komprehensif
   const filtered = useMemo(() => {
-    const query = q.trim().toLowerCase();
     return workshops.filter((w) => {
       // Filter Wilayah
       if (area !== "Semua" && w.area !== area) return false;
@@ -147,15 +155,12 @@ function Index() {
         if (!hasService) return false;
       }
 
-      // Filter Teks (Nama, Alamat, atau Layanan)
-      if (query) {
-        const textToSearch = `${w.name} ${w.address} ${w.services.join(" ")}`.toLowerCase();
-        if (!textToSearch.includes(query)) return false;
-      }
+      // Filter Teks Cerdas (Multi-Token AND dengan Stopword Kategori)
+      if (!matchesWorkshopSearch(w, parsedSearch)) return false;
 
       return true;
     });
-  }, [workshops, area, promoOnly, selectedService, q]);
+  }, [workshops, area, promoOnly, selectedService, parsedSearch]);
 
   // Bengkel Terpilih untuk Peta
   const selected = filtered.find((w) => w.id === selectedId) ?? filtered[0];
@@ -239,7 +244,7 @@ function Index() {
                   <Input
                     value={q}
                     onChange={(e) => setQ(e.target.value)}
-                    placeholder="Cari nama bengkel, lokasi jalan, atau spesialisasi servis…"
+                    placeholder="Cari nama, wilayah, atau layanan (contoh: 'bengkel ac', 'spooring batu', 'sukun')…"
                     className="h-13 rounded-2xl bg-card pl-11 pr-10 text-foreground placeholder:text-muted-foreground shadow-lg text-base border-primary/20 focus-visible:ring-signal"
                   />
                   {q && (
@@ -358,29 +363,48 @@ function Index() {
 
           {/* Status Hasil & Tombol Reset Filter */}
           <div className="flex flex-wrap items-center justify-between gap-2 pt-2 text-sm text-muted-foreground">
-            <p>
-              Menampilkan <span className="font-bold text-foreground">{filtered.length}</span>{" "}
-              bengkel
-              {area !== "Semua" && (
-                <>
-                  {" "}
-                  di <span className="font-semibold text-foreground">{area}</span>
-                </>
+            <div>
+              <p>
+                Menampilkan <span className="font-bold text-foreground">{filtered.length}</span>{" "}
+                bengkel
+                {area !== "Semua" && (
+                  <>
+                    {" "}
+                    di <span className="font-semibold text-foreground">{area}</span>
+                  </>
+                )}
+                {selectedService !== "Semua Layanan" && (
+                  <>
+                    {" "}
+                    dengan layanan{" "}
+                    <span className="font-semibold text-foreground">{selectedService}</span>
+                  </>
+                )}
+                {promoOnly && (
+                  <>
+                    {" "}
+                    dengan <span className="font-semibold text-signal">Promo Spesial</span>
+                  </>
+                )}
+                {parsedSearch.effectiveTokens.length > 0 && (
+                  <>
+                    {" "}
+                    untuk kata kunci{" "}
+                    <span className="font-semibold text-foreground">
+                      &quot;{parsedSearch.effectiveTokens.join(" ")}&quot;
+                    </span>
+                  </>
+                )}
+              </p>
+
+              {parsedSearch.isGenericOnly && (
+                <p className="mt-1 flex items-center gap-1.5 text-xs font-medium text-signal">
+                  <Sparkles className="h-3.5 w-3.5 shrink-0" />
+                  Menampilkan semua bengkel — ketik layanan, nama, atau wilayah lanjutan untuk
+                  mempersempit hasil.
+                </p>
               )}
-              {selectedService !== "Semua Layanan" && (
-                <>
-                  {" "}
-                  dengan layanan{" "}
-                  <span className="font-semibold text-foreground">{selectedService}</span>
-                </>
-              )}
-              {promoOnly && (
-                <>
-                  {" "}
-                  dengan <span className="font-semibold text-signal">Promo Spesial</span>
-                </>
-              )}
-            </p>
+            </div>
 
             {hasActiveFilters && (
               <Button
